@@ -16,6 +16,10 @@ class UserDB(Base):
     username: Mapped[str] = mapped_column(String(100))
 
     is_admin: Mapped[bool] = mapped_column(nullable=False, default=False)
+    accounts: Mapped[list["Account"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Account(Base):
@@ -26,6 +30,8 @@ class Account(Base):
     api_id: Mapped[int] = mapped_column(BigInteger)
     api_hash: Mapped[str] = mapped_column(String(100))
     path_session: Mapped[str] = mapped_column(String(100))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    user: Mapped["UserDB"] = relationship(back_populates="accounts")
 
     is_connected: Mapped[bool] = mapped_column(default=False)
     is_started: Mapped[bool] = mapped_column(default=False)
