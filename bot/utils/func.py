@@ -53,7 +53,7 @@ clarifying_texts = [
     "расскажите, действует ли кешбэк на {item} сейчас?",
     "я присматривалась к {item}, кешбэк доступен?",
     "получится ли оформить кешбэк за {item} сегодня?",
-    "интересуюсь {item}: кешбэк сохраняется?",
+    "интересуюсь {item} кешбэк сохраняется?",
     "я хотела уточнить, кешбэк на {item} ещё работает?",
     "кешбэк на {item} активен или уже закрыли?",
     "успеваю ли я на кешбэк по {item}?",
@@ -184,8 +184,7 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
         lead_in = ""
     follow_up = random.choice(follow_up_texts)
     follow_has_gratitude = any(
-        kw in follow_up.lower()
-        for kw in ("благодар", "признател", "рада", "спасибо")
+        kw in follow_up.lower() for kw in ("благодар", "признател", "рада", "спасибо")
     )
 
     closing_choice = random.choice(closing_texts) if closing_texts else ""
@@ -225,9 +224,7 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
 
     use_follow_up = random.random() < 0.75
     if use_follow_up:
-        follow_sentence = _with_punctuation(
-            follow_up.capitalize(), probability=0.3
-        )
+        follow_sentence = _with_punctuation(follow_up.capitalize(), probability=0.3)
         if closing:
             follow_sentence = f"{follow_sentence} {closing}".strip()
 
