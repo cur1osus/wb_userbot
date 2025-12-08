@@ -154,10 +154,12 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
             return text
         return f"{text}{mark}" if random.random() < probability else text
 
-    def _format_greeting(greeting_text: str) -> str:
+    def _format_greeting(greeting_text: str) -> tuple[str, bool]:
         # Иногда без восклицательного знака, чтобы звучало естественнее.
         punct = random.choices(["", "!", "."], weights=[0.35, 0.45, 0.2])[0]
-        return f"{greeting_text}{punct}".strip()
+        text = f"{greeting_text}{punct}".strip()
+        has_punct = punct in ("!", ".", "?")
+        return text, has_punct
 
     greeting = _pick_greeting()
     lead_in = random.choice(lead_in_texts)
@@ -171,9 +173,12 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
         "подскажите",
         "скажите",
         "интересуюсь",
+        "интересует",
         "можно",
         "уточните",
         "хочу уточнить",
+        "я хочу",
+        "я хотела",
     )
     if question_start.startswith(ask_prefixes):
         lead_in = ""
@@ -202,17 +207,21 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
 
     base_question = f"{lead_in}{question}"
     base_question = base_question[0].upper() + base_question[1:]
+    base_question_inline = base_question
 
     messages: list[str] = []
 
     # Случайно решаем, отправлять ли приветствие и разделять ли сообщения.
     split_greeting = random.random() < 0.5
-    greeting_formatted = _format_greeting(greeting)
+    greeting_formatted, greeting_has_punct = _format_greeting(greeting)
+    if not greeting_has_punct and base_question:
+        base_question_inline = base_question[0].lower() + base_question[1:]
+
     if split_greeting:
         messages.append(greeting_formatted)
         messages.append(base_question)
     else:
-        messages.append(f"{greeting_formatted} {base_question}".strip())
+        messages.append(f"{greeting_formatted} {base_question_inline}".strip())
 
     use_follow_up = random.random() < 0.75
     if use_follow_up:

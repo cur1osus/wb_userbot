@@ -112,6 +112,9 @@ async def mailing(
 
         if not targets:
             logger.info("Нет пользователей для рассылки")
+            account.is_started = False
+            await session.commit()
+            logger.info("Пользователи закончились — ставим бота на стоп")
             return
 
         logger.info("Начинаем рассылку: %s получателей", len(targets))
@@ -176,3 +179,16 @@ async def mailing(
                 await asyncio.sleep(cooldown)
 
         logger.info("Рассылка завершена. Отправлено сообщений: %s", sent)
+
+        remaining = await session.scalar(
+            select(Username.id)
+            .where(
+                Username.sended.is_(False),
+                Username.account_id == account_id,
+            )
+            .limit(1)
+        )
+        if remaining is None:
+            account.is_started = False
+            await session.commit()
+            logger.info("Пользователи закончились — ставим бота на стоп")
