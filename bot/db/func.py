@@ -12,7 +12,7 @@ class RedisStorage:
         self.decoder = msgspec.json.Decoder()
 
     def build_key(self, key: str) -> str:
-        return f"catcher:{self._client_hash}:{key}"
+        return f"wb_userbot:{self._client_hash}:{key}"
 
     async def get(self, key: Any) -> Any | None:
         """
