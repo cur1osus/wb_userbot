@@ -163,4 +163,8 @@ if __name__ == "__main__":
     console_handler.setFormatter(f)
     logger.addHandler(console_handler)
 
+    # Подавляем шумные логи Telethon об обновлениях каналов
+    logging.getLogger("telethon.client.updates").setLevel(logging.WARNING)
+    logging.getLogger("telethon").setLevel(logging.WARNING)
+
     asyncio.run(main())
