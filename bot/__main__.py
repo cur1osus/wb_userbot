@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from telethon import TelegramClient
 
-from bot.background_tasks import mailing, update_account_name
+from bot.background_tasks import mailing, process_jobs, update_account_name
 from bot.db.base import create_db_session_pool
 from bot.db.func import RedisStorage
 from bot.db.models import Account
@@ -60,6 +60,12 @@ async def set_tasks(
         )
 
     mailing_job.do(_mailing_job)
+    scheduler.every(15).seconds.do(
+        process_jobs,
+        client,
+        sessionmaker,
+        storage,
+    )
     scheduler.every(3).hours.do(
         update_account_name,
         client,

@@ -34,6 +34,7 @@ class Settings:
     mailing_interval_max_seconds: int = int(
         os.environ.get("MAILING_INTERVAL_MAX_SEC", 400)
     )
+    pinned_dialog_folder_name: str | None = os.environ.get("PINNED_DIALOG_FOLDER_NAME")
 
     def mysql_dsn(self) -> URL:
         return URL.create(

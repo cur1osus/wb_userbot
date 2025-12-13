@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    BLOB,
     BigInteger,
     String,
 )
@@ -35,7 +36,12 @@ class Account(Base):
 
     is_connected: Mapped[bool] = mapped_column(default=False)
     is_started: Mapped[bool] = mapped_column(default=False)
+    batch_size: Mapped[int] = mapped_column(nullable=False, default=5)
     usernames: Mapped[list["Username"]] = relationship(
+        back_populates="account",
+        cascade="all, delete-orphan",
+    )
+    jobs: Mapped[list["Job"]] = relationship(
         back_populates="account",
         cascade="all, delete-orphan",
     )
@@ -50,3 +56,14 @@ class Username(Base):
     username: Mapped[str] = mapped_column(String(100))
     item_name: Mapped[str] = mapped_column(String(100))
     sended: Mapped[bool] = mapped_column(default=False)
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    account: Mapped["Account"] = relationship(back_populates="jobs")
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+
+    name: Mapped[str] = mapped_column(String(50))
+    mdata: Mapped[int] = mapped_column(BLOB, nullable=True)  # metadata
+    answer: Mapped[int] = mapped_column(BLOB, nullable=True)
