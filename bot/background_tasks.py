@@ -21,7 +21,7 @@ from telethon.tl import types
 from bot.db.func import RedisStorage
 from bot.db.models import Account, Job, Username
 from bot.settings import se
-from bot.utils.func import randomize_text_message, send_message_safe
+from bot.utils.func import build_text_pools, randomize_text_message, send_message_safe
 
 logger = logging.getLogger(__name__)
 _msgpack_encoder = msgspec.msgpack.Encoder()
@@ -164,6 +164,14 @@ async def mailing(
             return
         if not account.is_started or not account.is_connected:
             return
+        account_texts = await account.awaitable_attrs.texts
+        if not account_texts:
+            logger.warning(
+                "Тексты для account_id=%s не настроены — рассылка остановлена",
+                account_id,
+            )
+            return
+        text_pools = await build_text_pools(account_texts)
         result = await session.execute(
             select(Username)
             .where(
@@ -186,7 +194,9 @@ async def mailing(
 
         sent = 0
         for idx, username_row in enumerate(targets, start=1):
-            messages_raw = await randomize_text_message(username_row.item_name)
+            messages_raw = await randomize_text_message(
+                username_row.item_name, text_pools
+            )
             messages = (
                 messages_raw if isinstance(messages_raw, list) else [messages_raw]
             )

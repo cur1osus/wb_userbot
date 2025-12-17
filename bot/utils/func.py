@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 from telethon import TelegramClient
 from telethon.hints import EntityLike
 
+from bot.db.models import AccountTexts
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,87 +19,56 @@ class UserData:
     item_name: str
 
 
-greetings_morning = [
-    "доброе утро",
-    "утро доброе",
-]
-
-greetings_day = [
-    "добрый день",
-    "доброго дня",
-]
-
-greetings_evening = [
-    "добрый вечер",
-    "рада знакомству, добрый вечер",
-]
-
-greetings_night = [
-    "доброй ночи",
-]
-
-greetings_anytime = [
-    "здравствуйте",
-    "приветствую",
-    "доброго времени суток",
-]
-
-clarifying_texts = [
-    "предложение по кешбэку на {item} ещё актуально?",
-    "кешбэк на {item} сейчас действует?",
-    "по {item} кешбэк ещё предлагается?",
-    "работает ли кешбэк за {item}?",
-    "на {item} кешбэк всё ещё в силе?",
-    "я ещё могу рассчитывать на кешбэк за {item}?",
-    "расскажите, действует ли кешбэк на {item} сейчас?",
-    "я присматривалась к {item}, кешбэк доступен?",
-    "получится ли оформить кешбэк за {item} сегодня?",
-    "интересуюсь {item} кешбэк сохраняется?",
-    "я хотела уточнить, кешбэк на {item} ещё работает?",
-    "кешбэк на {item} активен или уже закрыли?",
-    "успеваю ли я на кешбэк по {item}?",
-    "могу ли я оформить кешбэк на {item} прямо сейчас?",
-    "уточните, пожалуйста, по {item} кешбэк в силе?",
-]
-
-follow_up_texts = [
-    "если да, расскажите, пожалуйста, условия",
-    "готова оформить сегодня, если всё ещё в силе",
-    "если предложение актуально, напишите детали",
-    "готова обсудить условия кешбэка",
-    "буду благодарна за короткий ответ",
-    "буду рада, если подскажете детали",
-    "готова сразу оформить, если условия подходят",
-    "мне важно понять условия, расскажите, пожалуйста",
-    "если всё ок, сразу сделаю заказ",
-    "расскажите коротко, как активировать кешбэк",
-    "буду признательна за быстрый ответ",
-    "напишите коротко, как активировать кешбэк",
-    "если всё актуально, готова оформить сразу",
-]
-
-lead_in_texts = [
-    "",
-    "подскажите, ",
-    "можно уточнить, ",
-    "интересует, ",
-    "скажите, пожалуйста, ",
-    "а скажите, ",
-    "хочу уточнить, ",
-    "интересно узнать, ",
-]
-
-closing_texts = [
-    "",
-    "спасибо!",
-    "заранее спасибо",
-    "жду ваш ответ",
-    "буду признательна",
-    "буду рада ответу",
-]
+@dataclass
+class TextPools:
+    greetings_morning: list[str]
+    greetings_day: list[str]
+    greetings_evening: list[str]
+    greetings_night: list[str]
+    greetings_anytime: list[str]
+    clarifying_texts: list[str]
+    follow_up_texts: list[str]
+    lead_in_texts: list[str]
+    closing_texts: list[str]
 
 
-def _pick_greeting() -> str:
+def _normalize_texts(items: list[object]) -> list[str]:
+    texts: list[str] = []
+    for item in items:
+        text = getattr(item, "text", "")
+        if not isinstance(text, str):
+            continue
+        text = text.strip()
+        if text:
+            texts.append(text)
+    return texts
+
+
+async def build_text_pools(account_texts: AccountTexts) -> TextPools:
+    greetings_morning = await account_texts.awaitable_attrs.greetings_morning
+    greetings_day = await account_texts.awaitable_attrs.greetings_day
+    greetings_evening = await account_texts.awaitable_attrs.greetings_evening
+    greetings_night = await account_texts.awaitable_attrs.greetings_night
+    greetings_anytime = await account_texts.awaitable_attrs.greetings_anytime
+    clarifying_texts = await account_texts.awaitable_attrs.clarifying_texts
+    follow_up_texts = await account_texts.awaitable_attrs.follow_up_texts
+    lead_in_texts = await account_texts.awaitable_attrs.lead_in_texts
+    closing_texts = await account_texts.awaitable_attrs.closing_texts
+
+    return TextPools(
+        greetings_morning=_normalize_texts(greetings_morning),
+        greetings_day=_normalize_texts(greetings_day),
+        greetings_evening=_normalize_texts(greetings_evening),
+        greetings_night=_normalize_texts(greetings_night),
+        greetings_anytime=_normalize_texts(greetings_anytime),
+        clarifying_texts=_normalize_texts(clarifying_texts),
+        follow_up_texts=_normalize_texts(follow_up_texts),
+        lead_in_texts=_normalize_texts(lead_in_texts),
+        closing_texts=_normalize_texts(closing_texts),
+    )
+
+
+def _pick_greeting(text_pools: TextPools) -> str:
     """
     Выбираем приветствие по московскому времени, добавляя случайность.
     """
@@ -105,17 +76,30 @@ def _pick_greeting() -> str:
     hour = now.hour
 
     if 5 <= hour < 12:
-        pool = greetings_morning
+        base_pool = text_pools.greetings_morning
     elif 12 <= hour < 18:
-        pool = greetings_day
+        base_pool = text_pools.greetings_day
     elif 18 <= hour < 23:
-        pool = greetings_evening
+        base_pool = text_pools.greetings_evening
     else:
-        pool = greetings_night
+        base_pool = text_pools.greetings_night
 
     # Иногда используем нейтральное приветствие, чтобы разнообразить тон.
-    if random.random() < 0.25:
-        pool = pool + greetings_anytime
+    if random.random() < 0.25 and text_pools.greetings_anytime:
+        pool = base_pool + text_pools.greetings_anytime
+    else:
+        pool = base_pool or text_pools.greetings_anytime
+
+    if not pool:
+        pool = (
+            text_pools.greetings_anytime
+            or text_pools.greetings_morning
+            or text_pools.greetings_day
+            or text_pools.greetings_evening
+            or text_pools.greetings_night
+        )
+    if not pool:
+        raise ValueError("В AccountTexts нет доступных приветствий.")
 
     return random.choice(pool).capitalize()
 
@@ -141,7 +125,10 @@ async def send_message_safe(
     return success
 
 
-async def randomize_text_message(item_name: str) -> str | list[str]:
+async def randomize_text_message(
+    item_name: str,
+    text_pools: TextPools,
+) -> str | list[str]:
     item = item_name.strip() or "товар"
 
     def _with_punctuation(
@@ -160,9 +147,13 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
         has_punct = punct in ("!", ".", "?")
         return text, has_punct
 
-    greeting = _pick_greeting()
-    lead_in = random.choice(lead_in_texts)
-    question = random.choice(clarifying_texts).format(item=item)
+    greeting = _pick_greeting(text_pools)
+    lead_in = (
+        random.choice(text_pools.lead_in_texts) if text_pools.lead_in_texts else ""
+    )
+    if not text_pools.clarifying_texts:
+        raise ValueError("В AccountTexts нет уточняющих текстов.")
+    question = random.choice(text_pools.clarifying_texts).format(item=item)
 
     # Если вопрос уже начинается с "расскажите/подскажите/скажите",
     # убираем вводную часть, чтобы избежать тавтологии.
@@ -181,12 +172,16 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
     )
     if question_start.startswith(ask_prefixes):
         lead_in = ""
-    follow_up = random.choice(follow_up_texts)
+    follow_up = (
+        random.choice(text_pools.follow_up_texts) if text_pools.follow_up_texts else ""
+    )
     follow_has_gratitude = any(
         kw in follow_up.lower() for kw in ("благодар", "признател", "рада", "спасибо")
     )
 
-    closing_choice = random.choice(closing_texts) if closing_texts else ""
+    closing_choice = (
+        random.choice(text_pools.closing_texts) if text_pools.closing_texts else ""
+    )
     closing = (
         _with_punctuation(closing_choice.capitalize(), probability=0.3)
         if closing_choice
@@ -221,7 +216,7 @@ async def randomize_text_message(item_name: str) -> str | list[str]:
     else:
         messages.append(f"{greeting_formatted} {base_question_inline}".strip())
 
-    use_follow_up = random.random() < 0.75
+    use_follow_up = bool(follow_up) and random.random() < 0.75
     if use_follow_up:
         follow_sentence = _with_punctuation(follow_up.capitalize(), probability=0.3)
         if closing:
