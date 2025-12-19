@@ -28,6 +28,17 @@ _msgpack_encoder = msgspec.msgpack.Encoder()
 _phone_privacy_configured = False
 
 
+def _account_label(account: Account) -> str:
+    return account.name or account.phone or "неизвестный аккаунт"
+
+
+def _build_stop_payload(account: Account) -> bytes:
+    message = (
+        f"Аккаунт {_account_label(account)}: пользователи закончились, бот остановлен."
+    )
+    return _msgpack_encoder.encode(message)
+
+
 async def _get_folder_pinned_user_ids(client: TelegramClient) -> list[int]:
     """
     Возвращает user_id закреплённых диалогов из папки по названию из .env.
@@ -186,6 +197,13 @@ async def mailing(
         if not targets:
             logger.info("Нет пользователей для рассылки")
             account.is_started = False
+            session.add(
+                Job(
+                    account_id=account.id,
+                    name="account_notification",
+                    answer=_build_stop_payload(account),
+                )
+            )
             await session.commit()
             logger.info("Пользователи закончились — ставим бота на стоп")
             return
@@ -265,6 +283,13 @@ async def mailing(
         )
         if remaining is None:
             account.is_started = False
+            session.add(
+                Job(
+                    account_id=account.id,
+                    name="account_notification",
+                    answer=_build_stop_payload(account),
+                )
+            )
             await session.commit()
             logger.info("Пользователи закончились — ставим бота на стоп")
 
