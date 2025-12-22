@@ -20,7 +20,7 @@ from telethon.errors.rpcerrorlist import (
 from telethon.tl import types
 
 from bot.db.func import RedisStorage
-from bot.db.models import Account, Job, Username
+from bot.db.models import Account, AccountTexts, Job, Username
 from bot.settings import se
 from bot.utils.func import build_text_pools, randomize_text_message, send_message_safe
 
@@ -177,14 +177,16 @@ async def mailing(
             return
         if not account.is_started or not account.is_connected:
             return
-        account_texts = await account.awaitable_attrs.texts
-        if not account_texts:
+        account_texts_id = await session.scalar(
+            select(AccountTexts.id).where(AccountTexts.account_id == account_id).limit(1)
+        )
+        if not account_texts_id:
             logger.warning(
                 "Тексты для account_id=%s не настроены — рассылка остановлена",
                 account_id,
             )
             return
-        text_pools = await build_text_pools(account_texts)
+        text_pools = await build_text_pools(session, account_texts_id)
         result = await session.execute(
             select(Username.id, Username.username, Username.item_name)
             .where(

@@ -7,8 +7,21 @@ from zoneinfo import ZoneInfo
 
 from telethon import TelegramClient
 from telethon.hints import EntityLike
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import AccountTexts
+from bot.db.models import (
+    AccountTexts,
+    ClarifyingText,
+    ClosingText,
+    FollowUpText,
+    GreetingAnytime,
+    GreetingDay,
+    GreetingEvening,
+    GreetingMorning,
+    GreetingNight,
+    LeadInText,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,27 +57,42 @@ def _normalize_texts(items: list[object]) -> list[str]:
     return texts
 
 
-async def build_text_pools(account_texts: AccountTexts) -> TextPools:
-    greetings_morning = await account_texts.awaitable_attrs.greetings_morning
-    greetings_day = await account_texts.awaitable_attrs.greetings_day
-    greetings_evening = await account_texts.awaitable_attrs.greetings_evening
-    greetings_night = await account_texts.awaitable_attrs.greetings_night
-    greetings_anytime = await account_texts.awaitable_attrs.greetings_anytime
-    clarifying_texts = await account_texts.awaitable_attrs.clarifying_texts
-    follow_up_texts = await account_texts.awaitable_attrs.follow_up_texts
-    lead_in_texts = await account_texts.awaitable_attrs.lead_in_texts
-    closing_texts = await account_texts.awaitable_attrs.closing_texts
+async def _fetch_texts(
+    session: AsyncSession, model: type[AccountTexts], account_texts_id: int
+) -> list[str]:
+    result = await session.execute(
+        select(model.text).where(model.account_texts_id == account_texts_id)
+    )
+    texts: list[str] = []
+    for (text,) in result.all():
+        if isinstance(text, str):
+            stripped = text.strip()
+            if stripped:
+                texts.append(stripped)
+    return texts
 
+
+async def build_text_pools(
+    session: AsyncSession, account_texts_id: int
+) -> TextPools:
     return TextPools(
-        greetings_morning=_normalize_texts(greetings_morning),
-        greetings_day=_normalize_texts(greetings_day),
-        greetings_evening=_normalize_texts(greetings_evening),
-        greetings_night=_normalize_texts(greetings_night),
-        greetings_anytime=_normalize_texts(greetings_anytime),
-        clarifying_texts=_normalize_texts(clarifying_texts),
-        follow_up_texts=_normalize_texts(follow_up_texts),
-        lead_in_texts=_normalize_texts(lead_in_texts),
-        closing_texts=_normalize_texts(closing_texts),
+        greetings_morning=await _fetch_texts(
+            session, GreetingMorning, account_texts_id
+        ),
+        greetings_day=await _fetch_texts(session, GreetingDay, account_texts_id),
+        greetings_evening=await _fetch_texts(
+            session, GreetingEvening, account_texts_id
+        ),
+        greetings_night=await _fetch_texts(session, GreetingNight, account_texts_id),
+        greetings_anytime=await _fetch_texts(
+            session, GreetingAnytime, account_texts_id
+        ),
+        clarifying_texts=await _fetch_texts(
+            session, ClarifyingText, account_texts_id
+        ),
+        follow_up_texts=await _fetch_texts(session, FollowUpText, account_texts_id),
+        lead_in_texts=await _fetch_texts(session, LeadInText, account_texts_id),
+        closing_texts=await _fetch_texts(session, ClosingText, account_texts_id),
     )
 
 
