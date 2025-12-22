@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import re
 from typing import Any
 
 import msgspec
@@ -28,10 +29,19 @@ from bot.utils.func import build_text_pools, randomize_text_message, send_messag
 logger = logging.getLogger(__name__)
 _msgpack_encoder = msgspec.msgpack.Encoder()
 _phone_privacy_configured = False
+_USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{5,32}$")
 
 
 def _account_label(account: Account) -> str:
     return account.name or account.phone or "неизвестный аккаунт"
+
+
+def _normalize_username(username: str | None) -> str:
+    return (username or "").strip().lstrip("@")
+
+
+def _is_valid_username(username: str) -> bool:
+    return bool(username) and bool(_USERNAME_PATTERN.fullmatch(username))
 
 
 def _build_stop_payload(account: Account) -> bytes:
@@ -221,8 +231,17 @@ async def mailing(
         sent = 0
         for idx, username_row in enumerate(targets, start=1):
             username_id = username_row["id"]
-            username_value = username_row["username"]
+            username_value_raw = username_row["username"]
             item_name_value = username_row["item_name"]
+            username_value = _normalize_username(username_value_raw)
+            if not _is_valid_username(username_value):
+                await session.execute(delete(Username).where(Username.id == username_id))
+                await session.commit()
+                logger.info(
+                    "Удаляем некорректный username перед отправкой: @%s",
+                    username_value or username_value_raw,
+                )
+                continue
 
             messages_raw = await randomize_text_message(item_name_value, text_pools)
             messages = (
