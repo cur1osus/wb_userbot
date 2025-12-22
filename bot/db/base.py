@@ -39,8 +39,10 @@ async def create_db_session_pool(
         url=se.mysql_dsn(),
         max_overflow=10,
         pool_size=100,
-        pool_pre_ping=True,
-        pool_recycle=900,
+        # pool_pre_ping with aiomysql can trigger MissingGreenlet on ping;
+        # recycle connections more often instead of pre-pinging.
+        pool_pre_ping=False,
+        pool_recycle=300,
     )
 
     return engine, async_sessionmaker(engine, expire_on_commit=False)

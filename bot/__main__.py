@@ -3,6 +3,8 @@ import asyncio
 import logging
 import random
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -160,6 +162,10 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logging.getLogger("schedule").setLevel(logging.WARNING)
+
+    logging.Formatter.converter = (
+        lambda ts: datetime.fromtimestamp(ts, ZoneInfo("Europe/Moscow")).timetuple()
+    )
 
     # Формат логов
     f = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

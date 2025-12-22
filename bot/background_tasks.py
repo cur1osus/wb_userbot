@@ -4,12 +4,13 @@ import random
 from typing import Any
 
 import msgspec
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from telethon import TelegramClient, functions
 from telethon.errors.rpcerrorlist import (
     ChatWriteForbiddenError,
     FloodWaitError,
+    PeerIdInvalidError,
     PeerFloodError,
     UserDeactivatedBanError,
     UserDeactivatedError,
@@ -185,7 +186,7 @@ async def mailing(
             return
         text_pools = await build_text_pools(account_texts)
         result = await session.execute(
-            select(Username)
+            select(Username.id, Username.username, Username.item_name)
             .where(
                 Username.sended.is_(False),
                 Username.account_id == account_id,
@@ -193,7 +194,10 @@ async def mailing(
             .order_by(Username.id)
             .limit(account.batch_size)
         )
-        targets = list(result.scalars().all())
+        targets = [
+            {"id": row.id, "username": row.username, "item_name": row.item_name}
+            for row in result.all()
+        ]
 
         if not targets:
             logger.info("Нет пользователей для рассылки")
@@ -213,9 +217,11 @@ async def mailing(
 
         sent = 0
         for idx, username_row in enumerate(targets, start=1):
-            messages_raw = await randomize_text_message(
-                username_row.item_name, text_pools
-            )
+            username_id = username_row["id"]
+            username_value = username_row["username"]
+            item_name_value = username_row["item_name"]
+
+            messages_raw = await randomize_text_message(item_name_value, text_pools)
             messages = (
                 messages_raw if isinstance(messages_raw, list) else [messages_raw]
             )
@@ -233,14 +239,14 @@ async def mailing(
                 try:
                     success = await send_message_safe(
                         client,
-                        username_row.username,
+                        username_value,
                         messages,
                         delay=random.uniform(0.8, 1.6),
                     )
                 except FloodWaitError as e:
                     wait_time = e.seconds + random.randint(3, 12)
                     logger.warning(
-                        "FloodWait на @%s: спим %s сек", username_row.username, wait_time
+                        "FloodWait на @%s: спим %s сек", username_value, wait_time
                     )
                     await asyncio.sleep(wait_time)
                     skip_deletion = True
@@ -251,6 +257,11 @@ async def mailing(
                     )
                     stop_mailing = True
                     break
+                except PeerIdInvalidError:
+                    logger.info(
+                        "Некорректный peer для @%s — удаляем запись", username_value
+                    )
+                    break
                 except (
                     UserPrivacyRestrictedError,
                     UserIsBlockedError,
@@ -258,15 +269,19 @@ async def mailing(
                     UserDeactivatedBanError,
                     ChatWriteForbiddenError,
                 ) as e:
-                    logger.info("Не можем написать @%s: %s", username_row.username, e)
-                    username_row.sended = True
+                    logger.info("Не можем написать @%s: %s", username_value, e)
+                    await session.execute(
+                        update(Username)
+                        .where(Username.id == username_id)
+                        .values(sended=True)
+                    )
                     await session.commit()
                     skip_deletion = True
                     break
                 except Exception as e:  # noqa: BLE001
                     logger.exception(
                         "Ошибка при отправке @%s (попытка %s/%s): %s",
-                        username_row.username,
+                        username_value,
                         attempt,
                         max_send_attempts,
                         e,
@@ -284,7 +299,7 @@ async def mailing(
                     retry_delay = random.uniform(2.0, 5.0)
                     logger.warning(
                         "Повторяем отправку @%s (попытка %s/%s) через %.1f сек",
-                        username_row.username,
+                        username_value,
                         attempt + 1,
                         max_send_attempts,
                         retry_delay,
@@ -295,15 +310,19 @@ async def mailing(
                 break
 
             if success:
-                username_row.sended = True
+                await session.execute(
+                    update(Username)
+                    .where(Username.id == username_id)
+                    .values(sended=True)
+                )
                 await session.commit()
                 sent += 1
             elif not skip_deletion:
-                await session.delete(username_row)
+                await session.execute(delete(Username).where(Username.id == username_id))
                 await session.commit()
                 logger.info(
                     "Удалили запись для @%s после %s неудачных попыток отправки",
-                    username_row.username,
+                    username_value,
                     max_send_attempts,
                 )
 
