@@ -163,12 +163,10 @@ if __name__ == "__main__":
     logger.setLevel(logging.INFO)
     logging.getLogger("schedule").setLevel(logging.WARNING)
 
-    def _moscow_time(*args):
-        # logging calls converter(timestamp, ...); ignore extra args.
-        ts = args[0]
-        return datetime.fromtimestamp(ts, ZoneInfo("Europe/Moscow")).timetuple()
+    def _moscow_time(seconds, *_):
+        return datetime.fromtimestamp(seconds, ZoneInfo("Europe/Moscow")).timetuple()
 
-    logging.Formatter.converter = _moscow_time
+    logging.Formatter.converter = staticmethod(_moscow_time)
 
     # Формат логов
     f = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

@@ -16,6 +16,7 @@ from telethon.errors.rpcerrorlist import (
     UserDeactivatedError,
     UserIsBlockedError,
     UserPrivacyRestrictedError,
+    UsernameInvalidError,
 )
 from telethon.tl import types
 
@@ -259,9 +260,10 @@ async def mailing(
                     )
                     stop_mailing = True
                     break
-                except PeerIdInvalidError:
+                except (PeerIdInvalidError, UsernameInvalidError):
                     logger.info(
-                        "Некорректный peer для @%s — удаляем запись", username_value
+                        "Некорректный username/peer для @%s — удаляем запись",
+                        username_value,
                     )
                     break
                 except (
