@@ -160,6 +160,7 @@ async def mailing(
 
     Бот берёт свой account_id из Redis, чтобы отправлять только свои username.
     """
+    max_send_attempts = 3
     account_id_raw = await storage.get("account_id")
     try:
         account_id = int(account_id_raw)
@@ -222,47 +223,92 @@ async def mailing(
             delay = random.uniform(*base_delay)
             await asyncio.sleep(delay)
 
-            try:
-                success = await send_message_safe(
-                    client,
-                    username_row.username,
-                    messages,
-                    delay=random.uniform(0.8, 1.6),
-                )
-            except FloodWaitError as e:
-                wait_time = e.seconds + random.randint(3, 12)
-                logger.warning(
-                    "FloodWait на @%s: спим %s сек", username_row.username, wait_time
-                )
-                await asyncio.sleep(wait_time)
-                continue
-            except PeerFloodError:
-                logger.error(
-                    "Telegram ограничил отправку (PeerFlood). Останавливаемся."
-                )
+            attempt = 0
+            success = False
+            skip_deletion = False
+            stop_mailing = False
+
+            while attempt < max_send_attempts and not success:
+                attempt += 1
+                try:
+                    success = await send_message_safe(
+                        client,
+                        username_row.username,
+                        messages,
+                        delay=random.uniform(0.8, 1.6),
+                    )
+                except FloodWaitError as e:
+                    wait_time = e.seconds + random.randint(3, 12)
+                    logger.warning(
+                        "FloodWait на @%s: спим %s сек", username_row.username, wait_time
+                    )
+                    await asyncio.sleep(wait_time)
+                    skip_deletion = True
+                    break
+                except PeerFloodError:
+                    logger.error(
+                        "Telegram ограничил отправку (PeerFlood). Останавливаемся."
+                    )
+                    stop_mailing = True
+                    break
+                except (
+                    UserPrivacyRestrictedError,
+                    UserIsBlockedError,
+                    UserDeactivatedError,
+                    UserDeactivatedBanError,
+                    ChatWriteForbiddenError,
+                ) as e:
+                    logger.info("Не можем написать @%s: %s", username_row.username, e)
+                    username_row.sended = True
+                    await session.commit()
+                    skip_deletion = True
+                    break
+                except Exception as e:  # noqa: BLE001
+                    logger.exception(
+                        "Ошибка при отправке @%s (попытка %s/%s): %s",
+                        username_row.username,
+                        attempt,
+                        max_send_attempts,
+                        e,
+                    )
+                    await session.rollback()
+
+                if success:
+                    break
+
+                if (
+                    attempt < max_send_attempts
+                    and not skip_deletion
+                    and not stop_mailing
+                ):
+                    retry_delay = random.uniform(2.0, 5.0)
+                    logger.warning(
+                        "Повторяем отправку @%s (попытка %s/%s) через %.1f сек",
+                        username_row.username,
+                        attempt + 1,
+                        max_send_attempts,
+                        retry_delay,
+                    )
+                    await asyncio.sleep(retry_delay)
+
+            if stop_mailing:
                 break
-            except (
-                UserPrivacyRestrictedError,
-                UserIsBlockedError,
-                UserDeactivatedError,
-                UserDeactivatedBanError,
-                ChatWriteForbiddenError,
-            ) as e:
-                logger.info("Не можем написать @%s: %s", username_row.username, e)
-                username_row.sended = True
-                await session.commit()
-                continue
-            except Exception as e:  # noqa: BLE001
-                logger.exception(
-                    "Ошибка при отправке @%s: %s", username_row.username, e
-                )
-                await session.rollback()
-                continue
 
             if success:
                 username_row.sended = True
                 await session.commit()
                 sent += 1
+            elif not skip_deletion:
+                await session.delete(username_row)
+                await session.commit()
+                logger.info(
+                    "Удалили запись для @%s после %s неудачных попыток отправки",
+                    username_row.username,
+                    max_send_attempts,
+                )
+
+            if skip_deletion and not success:
+                continue
 
             if idx % cooldown_every == 0:
                 cooldown = random.uniform(*cooldown_range)

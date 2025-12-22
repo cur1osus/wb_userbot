@@ -111,18 +111,16 @@ async def send_message_safe(
     *,
     delay: float = 1.0,
 ):
-    success = False
     _more_than_one_message = len(messages) > 1
     for message in messages:
         try:
             await client.send_message(entity, message)
-            success = True
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения: {e}")
-            return False
+            logger.error("Ошибка при отправке сообщения: %s", e)
+            raise
         if _more_than_one_message:
             await asyncio.sleep(delay)
-    return success
+    return True
 
 
 async def randomize_text_message(
